@@ -1,0 +1,234 @@
+<title>CCE Knowledge Layers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; two figures (who owns what, then how one question is assembled) and a precedence table. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --fg: #1d232b; --muted: #5b6573; --rule: #d5dae1;
+  --platform: #2f5d9e; --platform-soft: #e6eef9;
+  --own: #2d7a52; --own-soft: #e4f2ea;
+  --deny: #b4372f;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161b; --panel: #1a2027; --fg: #e3e8ee; --muted: #9aa5b3; --rule: #2e3742;
+  --platform: #7fa8e6; --platform-soft: #1c2a3d; --own: #6cc597; --own-soft: #17301f; --deny: #ef7a70;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12161b; --panel: #1a2027; --fg: #e3e8ee; --muted: #9aa5b3; --rule: #2e3742;
+  --platform: #7fa8e6; --platform-soft: #1c2a3d; --own: #6cc597; --own-soft: #17301f; --deny: #ef7a70;
+  color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+main { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 36px 56px; display: grid; gap: 36px; }
+header { display: grid; gap: 8px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: 28px; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); }
+section { display: grid; gap: 14px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: grid; gap: 12px; }
+.scroll { overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; min-width: 640px; color: var(--fg); font-family: var(--sans); }
+figcaption { font-size: 13.5px; color: var(--muted); max-width: 80ch; }
+code { font-family: var(--mono); font-size: .9em; }
+
+/* svg classes */
+.t { fill: var(--fg); font-size: 13px; }
+.t-s { fill: var(--muted); font-size: 11.5px; }
+.t-h { fill: var(--fg); font-size: 15px; font-weight: 600; }
+.t-mono { font-family: var(--mono); font-size: 11.5px; fill: var(--muted); }
+.plat-box { fill: var(--platform-soft); stroke: var(--platform); stroke-width: 1.5; }
+.own-box { fill: var(--own-soft); stroke: var(--own); stroke-width: 1.5; }
+.neutral-box { fill: var(--panel); stroke: var(--rule); stroke-width: 1.2; }
+.plat-ink { fill: var(--platform); } .own-ink { fill: var(--own); } .deny-ink { fill: var(--deny); }
+.plat-line { stroke: var(--platform); stroke-width: 1.8; fill: none; }
+.own-line { stroke: var(--own); stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+.deny-line { stroke: var(--deny); stroke-width: 1.6; fill: none; stroke-dasharray: 3 4; }
+.flow { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.chip { fill: var(--panel); stroke: var(--rule); }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-size: 12px; font-family: var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); width: 2.5em; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 1px 8px; border-radius: 99px; }
+.pill.own { background: var(--own-soft); color: var(--own); }
+.pill.plat { background: var(--platform-soft); color: var(--platform); }
+ul.notes { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; max-width: 76ch; }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">CCE · ADR-0015 platform tenants</div>
+    <h1>How EazeWork knowledge is layered: product-wide vs. company-specific</h1>
+    <p class="lede">EazeWork is one <em>platform</em> tenant whose knowledge every customer company can read. Each customer company is a private <em>client</em> tenant. Postgres row-level security enforces this, not just the application code.</p>
+  </header>
+
+  <section>
+    <h2>1. Who owns what, and who can see it</h2>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 940 540" role="img" aria-label="The EazeWork platform tenant sits above every customer company. Each company reads platform knowledge but cannot edit it, can override it only through its own TenantOverride objects, and cannot see any other company.">
+        <defs>
+          <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="plat-ink"/></marker>
+          <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="own-ink"/></marker>
+        </defs>
+
+        <!-- Platform layer -->
+        <rect x="20" y="20" width="900" height="160" rx="10" class="plat-box"/>
+        <text x="40" y="48" class="t-h">EazeWork · platform tenant</text>
+        <text x="900" y="48" text-anchor="end" class="t-mono">kind = platform</text>
+        <g>
+          <rect x="40" y="64" width="270" height="70" rx="6" class="chip"/>
+          <text x="54" y="88" class="t">Help center</text>
+          <text x="54" y="108" class="t-s">78 articles → 103 how-to chunks</text>
+          <text x="54" y="124" class="t-s">ProcessPlaybook / ReportCatalogEntry</text>
+
+          <rect x="335" y="64" width="270" height="70" rx="6" class="chip"/>
+          <text x="349" y="88" class="t">Product behaviour</text>
+          <text x="349" y="108" class="t-s">menus, reports, what a setting does</text>
+          <text x="349" y="124" class="t-s">same for every customer</text>
+
+          <rect x="630" y="64" width="270" height="70" rx="6" class="chip"/>
+          <text x="644" y="88" class="t">Statutory rules (planned)</text>
+          <text x="644" y="108" class="t-s">EPF, gratuity… by country</text>
+          <text x="644" y="124" class="t-s">today: seeded per company</text>
+        </g>
+        <text x="40" y="162" class="t-s">Only EazeWork writes here. Changes go through proposal → certify, as everywhere.</text>
+
+        <!-- read arrows -->
+        <line x1="230" y1="182" x2="230" y2="292" class="plat-line" marker-end="url(#ap)"/>
+        <line x1="710" y1="182" x2="710" y2="292" class="plat-line" marker-end="url(#ap)"/>
+        <text x="242" y="232" class="t plat-ink" style="fill:var(--platform)">reads</text>
+        <text x="242" y="249" class="t-s">cannot edit or supersede</text>
+        <text x="722" y="232" class="t" style="fill:var(--platform)">reads</text>
+        <text x="722" y="249" class="t-s">cannot edit or supersede</text>
+
+        <!-- override (interprets) arrows -->
+        <path d="M110 296 L110 188" class="own-line" marker-end="url(#ao)"/>
+        <text x="40" y="228" class="t-s" style="fill:var(--own)">TenantOverride</text>
+        <text x="40" y="244" class="t-s" style="fill:var(--own)">"interprets" edge</text>
+
+        <!-- Company A -->
+        <rect x="20" y="296" width="420" height="220" rx="10" class="own-box"/>
+        <text x="40" y="324" class="t-h">Company A · client tenant</text>
+        <text x="420" y="324" text-anchor="end" class="t-mono">kind = client</text>
+        <text x="40" y="354" class="t">Policies &amp; definitions <tspan class="t-s">(leave, notice, CTC…)</tspan></text>
+        <text x="40" y="378" class="t">Configuration snapshot <tspan class="t-s">(UC-H0 → policies + gaps)</tspan></text>
+        <text x="40" y="402" class="t">Overrides of platform knowledge</text>
+        <text x="40" y="426" class="t">Precedents, corrections</text>
+        <text x="40" y="450" class="t">Proposals, traces, knowledge gaps, change log</text>
+        <text x="40" y="490" class="t-s">Read and write its own rows only.</text>
+
+        <!-- Company B -->
+        <rect x="500" y="296" width="420" height="220" rx="10" class="own-box"/>
+        <text x="520" y="324" class="t-h">Company B · client tenant</text>
+        <text x="900" y="324" text-anchor="end" class="t-mono">kind = client</text>
+        <text x="520" y="354" class="t">Its own policies &amp; configuration</text>
+        <text x="520" y="378" class="t">Its own overrides, precedents, gaps</text>
+        <text x="520" y="402" class="t-s">… one client tenant per EazeWork customer</text>
+        <text x="520" y="426" class="t-s">(make company NAME="…")</text>
+        <text x="520" y="490" class="t-s">Read and write its own rows only.</text>
+
+        <!-- isolation between companies -->
+        <line x1="444" y1="400" x2="496" y2="400" class="deny-line"/>
+        <circle cx="470" cy="400" r="11" style="fill:var(--bg);stroke:var(--deny);stroke-width:1.5"/>
+        <path d="M465 395 L475 405 M475 395 L465 405" style="stroke:var(--deny);stroke-width:1.8"/>
+        <text x="470" y="428" text-anchor="middle" class="t-s" style="fill:var(--deny)">no access</text>
+      </svg>
+      </div>
+      <figcaption>Blue arrows: every company reads the platform layer. It can't edit or supersede platform rows: at the database level such an UPDATE affects 0 rows and an INSERT as the platform is refused. A company that does things differently writes its own <code>TenantOverride</code> that <em>interprets</em> the platform object (green, dashed). Companies never see each other.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2. How one question is assembled</h2>
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 940 300" role="img" aria-label="EazeWork's backend sends a question with an integrator key and the company name; CCE retrieves from that company's knowledge plus the platform layer, filters by the employee's scope, then orders own knowledge before platform knowledge within each type.">
+        <defs>
+          <marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker>
+        </defs>
+        <!-- step boxes -->
+        <rect x="20" y="40" width="190" height="150" rx="8" class="neutral-box"/>
+        <text x="36" y="66" class="t-h">EazeWork backend</text>
+        <text x="36" y="92" class="t-mono">integrator key</text>
+        <text x="36" y="112" class="t-mono">X-CCE-Tenant:</text>
+        <text x="36" y="128" class="t-mono">  Company A</text>
+        <text x="36" y="152" class="t-mono">scope: grade, entity,</text>
+        <text x="36" y="168" class="t-mono">  location…</text>
+
+        <rect x="250" y="40" width="200" height="150" rx="8" class="neutral-box"/>
+        <text x="266" y="66" class="t-h">Retrieve</text>
+        <rect x="266" y="82" width="168" height="40" rx="5" class="own-box"/>
+        <text x="278" y="106" class="t">Company A rows</text>
+        <rect x="266" y="130" width="168" height="40" rx="5" class="plat-box"/>
+        <text x="278" y="154" class="t">+ platform rows</text>
+
+        <rect x="490" y="40" width="200" height="150" rx="8" class="neutral-box"/>
+        <text x="506" y="66" class="t-h">Filter</text>
+        <text x="506" y="92" class="t">scope: other grades /</text>
+        <text x="506" y="110" class="t">entities out</text>
+        <text x="506" y="134" class="t">entity ⇒ country</text>
+        <text x="506" y="152" class="t">sensitivity by role</text>
+        <text x="506" y="176" class="t">9,000-char budget</text>
+
+        <rect x="730" y="40" width="190" height="150" rx="8" class="neutral-box"/>
+        <text x="746" y="66" class="t-h">Order &amp; cite</text>
+        <text x="746" y="92" class="t">by type rank, then</text>
+        <rect x="746" y="104" width="44" height="20" rx="10" class="own-box"/>
+        <text x="768" y="118" text-anchor="middle" class="t-s" style="fill:var(--own)">own</text>
+        <text x="798" y="118" class="t">before</text>
+        <rect x="844" y="104" width="64" height="20" rx="10" class="plat-box"/>
+        <text x="876" y="118" text-anchor="middle" class="t-s" style="fill:var(--platform)">platform</text>
+        <text x="746" y="148" class="t">each citation says</text>
+        <text x="746" y="166" class="t-mono">owner: own|platform</text>
+
+        <line x1="212" y1="115" x2="246" y2="115" class="flow" marker-end="url(#af)"/>
+        <line x1="452" y1="115" x2="486" y2="115" class="flow" marker-end="url(#af)"/>
+        <line x1="692" y1="115" x2="726" y2="115" class="flow" marker-end="url(#af)"/>
+
+        <!-- what's never in the pool -->
+        <rect x="250" y="222" width="200" height="50" rx="6" style="fill:none;stroke:var(--deny);stroke-dasharray:4 4"/>
+        <text x="350" y="244" text-anchor="middle" class="t-s" style="fill:var(--deny)">Company B rows</text>
+        <text x="350" y="261" text-anchor="middle" class="t-s" style="fill:var(--deny)">never in the pool (RLS)</text>
+        <text x="20" y="250" class="t-s">Separate budgets:</text>
+        <text x="20" y="266" class="t-s">6 policy + 4 how-to</text>
+        <text x="490" y="250" class="t-s">e.g. UAE entity ⇒ India gratuity</text>
+        <text x="490" y="266" class="t-s">rule is excluded (H1-14)</text>
+      </svg>
+      </div>
+      <figcaption>A help center with hundreds of chunks can't crowd out a company's own policy. Policy and how-to have separate retrieval budgets, and own rows are ordered ahead of platform rows of the same type.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>3. Precedence inside the answer context</h2>
+    <p class="lede">Blocks are sorted by these keys, in this order. Type comes first, so a company's override always outranks the general rule. Ownership only breaks ties within a type.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>#</th><th>Sort key</th><th>Order</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td>Knowledge type</td><td>TenantOverride → PolicyRule / Definition → ComplianceRequirement → ApprovalPrecedent → ProcessPlaybook / ReportCatalogEntry</td></tr>
+        <tr><td class="n">2</td><td>Owner</td><td><span class="pill own">own</span> before <span class="pill plat">platform</span></td></tr>
+        <tr><td class="n">3</td><td>Provenance</td><td>human correction → pack seed → ingested document → agent-derived</td></tr>
+        <tr><td class="n">4</td><td>Confidence, version</td><td>higher first</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where this stands</h2>
+    <ul class="notes">
+      <li><strong>Live:</strong> platform/client tenants, read-only inheritance enforced by RLS, integrator key with <code>X-CCE-Tenant</code>, ordering by owner, and <code>owner</code> on every citation (migration 0005, 10 walking-skeleton checks).</li>
+      <li><strong>Not yet platform-level:</strong> statutory rules such as EPF and gratuity are still copied into each company by country when the pack installs. Moving them to the platform layer is on the roadmap.</li>
+      <li><strong>Opt-out:</strong> a tenant with <code>inherits_platform = false</code> sees no platform rows. Eval tenants use this so the golden set stays hermetic.</li>
+      <li><strong>Exclusions:</strong> configuration gaps are signals for certifiers and are never cited in answers. Confidential rows reach privileged roles only.</li>
+    </ul>
+  </section>
+</main>

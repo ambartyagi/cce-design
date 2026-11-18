@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cumulative Context Engine — Architecture & Roadmap</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #898781;
+    --grid: #e1e0d9;
+    --border: rgba(11,11,11,0.10);
+    --store: #2a78d6;      /* blue: context store / core */
+    --gov: #eb6834;        /* orange: governance */
+    --agent: #1baf7a;      /* aqua: agents & LLM */
+    --product: #eda100;    /* yellow: data products & reports */
+    --graph: #4a3aa7;      /* violet: graph / derived layer */
+    --store-t: rgba(42,120,214,0.08);
+    --gov-t: rgba(235,104,52,0.08);
+    --agent-t: rgba(27,175,122,0.08);
+    --product-t: rgba(237,161,0,0.10);
+    --graph-t: rgba(74,58,167,0.08);
+    --neutral-t: rgba(11,11,11,0.035);
+    --done: #0ca30c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --page: #0d0d0d;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+      --store: #3987e5; --gov: #d95926; --agent: #199e70;
+      --product: #c98500; --graph: #9085e9;
+      --store-t: rgba(57,135,229,0.13); --gov-t: rgba(217,89,38,0.13);
+      --agent-t: rgba(25,158,112,0.13); --product-t: rgba(201,133,0,0.14);
+      --graph-t: rgba(144,133,233,0.13); --neutral-t: rgba(255,255,255,0.05);
+      --done: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --page: #0d0d0d;
+    --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+    --store: #3987e5; --gov: #d95926; --agent: #199e70;
+    --product: #c98500; --graph: #9085e9;
+    --store-t: rgba(57,135,229,0.13); --gov-t: rgba(217,89,38,0.13);
+    --agent-t: rgba(25,158,112,0.13); --product-t: rgba(201,133,0,0.14);
+    --graph-t: rgba(144,133,233,0.13); --neutral-t: rgba(255,255,255,0.05);
+    --done: #0ca30c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: transparent; }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--ink-1);
+    padding: 28px 24px 48px; min-height: 100vh;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  h1 { font-size: 21px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-2); font-size: 13px; margin-top: 4px; }
+  h2 { font-size: 15px; font-weight: 650; margin: 40px 0 4px; }
+  h2 .tag { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-left: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .caption { color: var(--ink-2); font-size: 12.5px; margin-bottom: 14px; max-width: 72ch; }
+  .panel {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+  }
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0 0; font-size: 12px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  /* generic box */
+  .box {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; background: var(--neutral-t);
+    border-top: 2.5px solid var(--ink-3);
+  }
+  .box b { font-size: 12.5px; font-weight: 650; display: block; }
+  .box small { font-size: 11px; color: var(--ink-2); line-height: 1.45; display: block; margin-top: 3px; }
+  .box.store { border-top-color: var(--store); background: var(--store-t); }
+  .box.gov { border-top-color: var(--gov); background: var(--gov-t); }
+  .box.agent { border-top-color: var(--agent); background: var(--agent-t); }
+  .box.product { border-top-color: var(--product); background: var(--product-t); }
+  .box.graph { border-top-color: var(--graph); background: var(--graph-t); }
+  .box.dashed { border-style: dashed; border-top-style: solid; opacity: 0.85; }
+  /* deployment diagram */
+  .dock { border: 1.5px dashed var(--grid); border-radius: 10px; padding: 14px; position: relative; margin-top: 8px; }
+  .dock-label { position: absolute; top: -9px; left: 12px; background: var(--surface-1); padding: 0 8px; font-size: 11px; color: var(--ink-3); font-weight: 600; letter-spacing: 0.04em; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stackline { display: flex; justify-content: center; margin: 2px 0; }
+  .stackline svg { display: block; }
+  .apimods { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  .chip { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-1); }
+  .sideflank { display: grid; grid-template-columns: 1.9fr 1fr; gap: 12px; margin-top: 12px; }
+  /* loop */
+  .loop { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; counter-reset: step; }
+  .loop .box { position: relative; padding-left: 34px; min-height: 74px; }
+  .loop .box::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 10px; top: 10px;
+    width: 17px; height: 17px; border-radius: 50%;
+    font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    background: var(--ink-1); color: var(--surface-1);
+  }
+  .loop-note { margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+  .loop-note b { color: var(--ink-1); }
+  /* layers diagram */
+  .layers { display: grid; gap: 10px; }
+  .layer { display: grid; grid-template-columns: 148px 1fr; gap: 12px; align-items: stretch; }
+  .layer-name { font-size: 12px; font-weight: 650; color: var(--ink-2); padding-top: 12px; }
+  .layer-name em { display: block; font-style: normal; font-weight: 400; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .cells { display: grid; gap: 8px; }
+  .c2 { grid-template-columns: 1fr 1fr; } .c3 { grid-template-columns: 1fr 1fr 1fr; } .c4 { grid-template-columns: repeat(4, 1fr); }
+  .flow-arrow { display: flex; justify-content: center; color: var(--ink-3); }
+  /* phases */
+  .phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin-top: 8px; }
+  .phase { position: relative; padding: 0 14px 0 6px; }
+  .phase + .phase { border-left: 1px solid var(--grid); padding-left: 16px; }
+  .ph-head { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .ph-sub { font-size: 11px; color: var(--ink-3); margin: 2px 0 10px; }
+  .ph-items { display: grid; gap: 6px; }
+  .ph-item { font-size: 11px; line-height: 1.4; color: var(--ink-2); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); border-left-width: 3px; background: var(--neutral-t); }
+  .ph-item.store { border-left-color: var(--store); background: var(--store-t); }
+  .ph-item.gov { border-left-color: var(--gov); background: var(--gov-t); }
+  .ph-item.agent { border-left-color: var(--agent); background: var(--agent-t); }
+  .ph-item.product { border-left-color: var(--product); background: var(--product-t); }
+  .ph-item.graph { border-left-color: var(--graph); background: var(--graph-t); }
+  .ph-item.infra { border-left-color: var(--ink-3); }
+  .youare {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 700; color: var(--surface-1);
+    background: var(--done); border-radius: 999px; padding: 2px 8px;
+  }
+  .gate { margin-top: 10px; font-size: 10.5px; color: var(--ink-3); border-top: 1px dashed var(--grid); padding-top: 7px; }
+  .gate b { color: var(--ink-2); font-weight: 650; }
+  .foot { margin-top: 34px; font-size: 11.5px; color: var(--ink-3); }
+  @media (max-width: 860px) {
+    .row3, .loop, .phases { grid-template-columns: 1fr 1fr; }
+    .phases .phase { border-left: none; border-top: 1px solid var(--grid); padding: 12px 6px; }
+    .layer { grid-template-columns: 1fr; }
+    .sideflank { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+
+  <h1>Cumulative Context Engine — Architecture &amp; Roadmap</h1>
+  <div class="sub">Where the system is today (running on Docker Desktop), the target shape, and how each phase gets there. Aug 2026.</div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--store)"></i>Context store &amp; core</span>
+    <span><i class="sw" style="background:var(--gov)"></i>Governance</span>
+    <span><i class="sw" style="background:var(--agent)"></i>Agents &amp; LLM</span>
+    <span><i class="sw" style="background:var(--product)"></i>Data products &amp; reports</span>
+    <span><i class="sw" style="background:var(--graph)"></i>Graph / derived layer</span>
+    <span><i class="sw" style="background:var(--ink-3)"></i>Infrastructure</span>
+  </div>
+
+  <!-- ================= 1. CURRENT DEPLOYMENT ================= -->
+  <h2>1 · What is running right now <span class="tag">Phase 0 — walking skeleton, deployed</span></h2>
+  <div class="caption">One Python codebase, one Docker image, multiple entrypoints. Postgres is the only stateful service. Everything below is live on your machine and passed the 14-check end-to-end verification.</div>
+
+  <div class="panel">
+    <div class="dock">
+      <span class="dock-label">DOCKER NETWORK · cce (Docker Desktop → Mac Mini → cloud, same images)</span>
+      <div class="row3">
+        <div class="box">
+          <b>api <span style="font-weight:400;color:var(--ink-3)">:8000</span></b>
+          <small>FastAPI · tenant auth (hashed keys) · operator endpoints</small>
+          <div class="apimods">
+            <span class="chip" style="border-color:var(--store);color:var(--store)">store.py — versioning &amp; supersession</span>
+            <span class="chip" style="border-color:var(--store);color:var(--store)">compiler.py — context + attribution</span>
+            <span class="chip" style="border-color:var(--gov);color:var(--gov)">proposals → certify → materialize</span>
+            <span class="chip" style="border-color:var(--agent);color:var(--agent)">llm.py — echo | anthropic | openai-compat</span>
+          </div>
+        </div>
+        <div class="box">
+          <b>worker</b>
+          <small>Postgres job queue (<code>SKIP LOCKED</code>) · embed jobs (no-op until an embeddings provider is chosen) · retries + failure states</small>
+        </div>
+        <div class="box">
+          <b>migrate <span style="font-weight:400;color:var(--ink-3)">one-shot</span></b>
+          <small>Alembic gate — api/worker start only after schema is current. Baseline creates tables, cce_app role, RLS policies</small>
+        </div>
+      </div>
+      <div class="stackline">
+        <svg width="24" height="26" viewBox="0 0 24 26" aria-hidden="true"><path d="M12 2v16m0 0l-5-5m5 5l5-5" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="box store" style="border-top-width:3px">
+        <b>postgres · pgvector <span style="font-weight:400;color:var(--ink-3)">— the only stateful service (volume: cce-pgdata)</span></b>
+        <small>knowledge_objects (versioned, valid-time, provenance, confidence) · proposals · dependency_edges · change_log (append-only) · decision_traces (attribution) · jobs · tenants/api_keys — <b>RLS row-level isolation per tenant, enforced in the database</b></small>
+      </div>
+    </div>
+
+    <div class="sideflank">
+      <div class="box dashed agent">
+        <b>LLM providers <span style="font-weight:400;color:var(--ink-3)">— routed by config, outside the stack</span></b>
+        <small>echo (offline, default) · Anthropic API (hosted) · exo cluster / ollama via OpenAI-compatible endpoint (<code>host.docker.internal:52415</code>)</small>
+      </div>
+      <div class="box dashed">
+        <b>caddy <span style="font-weight:400;color:var(--ink-3)">prod profile</span></b>
+        <small>Reverse proxy + TLS on the Mac Mini; dev talks to :8000 directly</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. THE LOOP ================= -->
+  <h2>2 · The compounding loop <span class="tag">the product, in one cycle</span></h2>
+  <div class="caption">Every use case in every domain is an instance of this cycle. It is what the 14-check demo exercises, and what every later phase makes richer — never different.</div>
+
+  <div class="panel">
+    <div class="loop">
+      <div class="box agent"><b>Ask</b><small>Agent compiles context: retrieve → precedence → inject. Attribution records exactly which object versions entered the answer.</small></div>
+      <div class="box store"><b>Answer + cite</b><small>Grounded response citing certified objects. Decision trace stored — reproducible, auditable.</small></div>
+      <div class="box gov"><b>Correct → propose</b><small>User or agent flags a miss. Correction becomes a proposal with rationale, risk class, and impact preview.</small></div>
+      <div class="box gov"><b>Certify → supersede</b><small>Human (or policy, when low-risk) certifies. New version materializes; old version retained as history; change log appended.</small></div>
+    </div>
+    <div class="loop-note">↻ Next ask is <b>permanently better</b> — and the eval harness's golden set guarantees a certified correction never regresses.</div>
+  </div>
+
+  <!-- ================= 3. TARGET ARCHITECTURE ================= -->
+  <h2>3 · Target architecture <span class="tag">where the phases lead</span></h2>
+  <div class="caption">The four design layers, plus the two additions from later design rounds: the two-layer knowledge split (certified truth vs. regenerable indexes) and the reporting/archetype surface. Dashed boxes don't exist yet.</div>
+
+  <div class="panel">
+    <div class="layers">
+
+      <div class="layer">
+        <div class="layer-name">Capture &amp; ingestion<em>supply side</em></div>
+        <div class="cells c4">
+          <div class="box gov"><b>Corrections</b><small>from answers &amp; reports — live today</small></div>
+          <div class="box dashed gov"><b>Elicitation</b><small>post-mortems, playtests, interviews</small></div>
+          <div class="box dashed gov"><b>Connectors</b><small>policy docs, telemetry, corpus watch (Steward)</small></div>
+          <div class="box dashed gov"><b>Promotion</b><small>agent session memory → proposals</small></div>
+        </div>
+      </div>
+
+      <div class="flow-arrow"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v12m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+      <div class="layer">
+        <div class="layer-name">Governance<em>every write path</em></div>
+        <div class="cells c4">
+          <div class="box gov"><b>Proposals</b><small>never silent truth — live today</small></div>
+          <div class="box gov"><b>Impact preview</b><small>v1 live: dependents + answer usage</small></div>
+          <div class="box gov"><b>Certification</b><small>risk-gated; live (manual v0)</small></div>
+          <div class="box dashed gov"><b>Auto-materialize</b><small>low-risk + sampled review (Gathr first)</small></div>
+        </div>
+      </div>
+
+      <div class="flow-arrow"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v12m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+      <div class="layer">
+        <div class="layer-name">Context store<em>two layers, one truth</em></div>
+        <div class="cells c2">
+          <div class="box store"><b>Layer 1 — certified knowledge</b><small>Versioned objects (live) · <span style="color:var(--graph);font-weight:600">entities + aliases, typed edges (Phase 2)</span> · valid-time, provenance, confidence · append-only history · RLS tenancy</small></div>
+          <div class="box graph dashed"><b>Layer 2 — derived indexes</b><small>Regenerable, uncertified, no authority: embeddings (wired, provider pending) · extracted graphs · community summaries. Feeds retrieval; never bypasses certification</small></div>
+        </div>
+      </div>
+
+      <div class="flow-arrow"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v12m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+      <div class="layer">
+        <div class="layer-name">Consumption<em>demand side</em></div>
+        <div class="cells c3">
+          <div class="box agent"><b>Agent archetypes</b><small>Oracle (live, v0) · Analyst · Sentinel · Elicitor · <b>Steward + Advisor + Reporter</b> = taxation-agent franchise</small></div>
+          <div class="box product dashed"><b>Data products</b><small>governed, self-describing, contract-versioned; BI reads the same products</small></div>
+          <div class="box product dashed"><b>Reports</b><small>scheduled ReportRuns · numbers from queries, words from models · self-explaining deltas</small></div>
+        </div>
+      </div>
+
+      <div class="flow-arrow"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v12m0 0l-4-4m4 4l4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+      <div class="layer">
+        <div class="layer-name">Configuration<em>per domain</em></div>
+        <div class="cells c2">
+          <div class="box dashed"><b>Domain packs</b><small>hrms · campaigns · gathr — ontology (types + relationship rules), agents, risk &amp; sharing policies, seeds, golden questions. Install = proposals, zero platform code</small></div>
+          <div class="box dashed"><b>Eval harness</b><small>golden sets per domain · no-regression invariant · hosted-vs-exo arbitration · doubles as cloud-migration acceptance test</small></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= 4. PHASES ================= -->
+  <h2>4 · Phase progression <span class="tag">each phase ends with a working system, never a rewrite</span></h2>
+  <div class="caption">Colors show which subsystem each step grows. The architecture never changes shape after Phase 0 — later phases add capability onto the same loop, which is why the skeleton was worth building first.</div>
+
+  <div class="panel">
+    <div class="phases">
+
+      <div class="phase">
+        <div class="ph-head">Phase 0 <span class="youare">✓ HERE</span></div>
+        <div class="ph-sub">Walking skeleton — done</div>
+        <div class="ph-items">
+          <div class="ph-item infra">Docker stack: api · worker · migrate · postgres+pgvector</div>
+          <div class="ph-item store">Versioned store, supersession, RLS tenancy, attribution</div>
+          <div class="ph-item gov">Proposal → certify → materialize; impact preview v1</div>
+          <div class="ph-item agent">Provider abstraction (echo / Anthropic / exo)</div>
+        </div>
+        <div class="gate"><b>Exit gate:</b> 14-check loop passes on your machine ✓</div>
+      </div>
+
+      <div class="phase">
+        <div class="ph-head">Phase 1</div>
+        <div class="ph-sub">First real domain + evals</div>
+        <div class="ph-items">
+          <div class="ph-item infra">Domain-pack loader (YAML → DB via proposals)</div>
+          <div class="ph-item store">Schema deep-dive: migration 0002 fields</div>
+          <div class="ph-item agent">HRMS policy_qa agent · real LLM routing · embeddings provider</div>
+          <div class="ph-item product">Eval harness + first golden set (20–30 questions)</div>
+        </div>
+        <div class="gate"><b>Exit gate:</b> golden set green; one certified correction demonstrably never regresses</div>
+      </div>
+
+      <div class="phase">
+        <div class="ph-head">Phase 2</div>
+        <div class="ph-sub">Graph Stage 1 + capture</div>
+        <div class="ph-items">
+          <div class="ph-item graph">Entities + aliases; typed edges through proposals</div>
+          <div class="ph-item graph">Compilation one-hop expansion; graph impact preview</div>
+          <div class="ph-item gov">Bootstrap ingestion (UC-H6): docs → proposal batches</div>
+          <div class="ph-item gov">Risk rubric v1 + batch certification</div>
+        </div>
+        <div class="gate"><b>Exit gate:</b> multi-hop golden questions pass; blast radius traverses depth 2–3</div>
+      </div>
+
+      <div class="phase">
+        <div class="ph-head">Phase 3</div>
+        <div class="ph-sub">Products, reports, 2nd domain</div>
+        <div class="ph-items">
+          <div class="ph-item product">Data products + ReportTemplates; scheduler; delta attribution</div>
+          <div class="ph-item agent">Gathr pack: Sentinel/test agent, auto-materialize + sampled review</div>
+          <div class="ph-item gov">Review-gated reports (certification queue reuse)</div>
+          <div class="ph-item infra">Mac Mini move: registry pulls, backups + restore rehearsal, Tailscale</div>
+        </div>
+        <div class="gate"><b>Exit gate:</b> first recurring report ships itself; second tenant isolated in production</div>
+      </div>
+
+      <div class="phase">
+        <div class="ph-head">Phase 4</div>
+        <div class="ph-sub">Advisors &amp; scale</div>
+        <div class="ph-items">
+          <div class="ph-item agent">Steward + Advisor + Reporter composite (taxation agent)</div>
+          <div class="ph-item graph">Layer-2 derived graphs / GraphRAG for bootstrap &amp; dossiers — if measured need</div>
+          <div class="ph-item product">Campaigns pack; interpretation corpus compounding</div>
+          <div class="ph-item infra">Cloud re-homing: managed Postgres first; golden set = acceptance test</div>
+        </div>
+        <div class="gate"><b>Exit gate:</b> rule change → blast radius → impact memo → re-certified, end to end</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="foot">Companion to the CCE design series: Design Doc · Design Review · Docker Deployment · Use Cases &amp; Domain Config · Reporting &amp; Archetypes · Ontology &amp; Graph Layer — all v0.1.</div>
+
+</div></div>
+</body>
+</html>
